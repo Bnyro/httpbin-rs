@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::{collections::HashMap, net::SocketAddr, thread, time::Duration};
 
 use axum::{
     body::Body,
@@ -71,6 +71,14 @@ async fn index(
         .unwrap_or(&String::from("200"))
         .parse()
         .unwrap_or(200);
+
+    let delay_param: u64 = queries
+        .get("delay")
+        .unwrap_or(&String::from("0"))
+        .parse()
+        .unwrap_or(0);
+
+    thread::sleep(Duration::from_millis(delay_param));
 
     let status_code = StatusCode::from_u16(status_param);
     (status_code.unwrap_or(StatusCode::OK), Json(response))
