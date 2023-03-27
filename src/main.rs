@@ -2,14 +2,14 @@ use std::{collections::HashMap, net::SocketAddr};
 
 use axum::{
     body::Body,
-    extract::{ConnectInfo, OriginalUri},
-    http::Request,
+    extract::{rejection::PathRejection, ConnectInfo, OriginalUri, Path},
+    http::{Request, StatusCode},
     routing::any,
     Json, Router,
 };
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct JsonResponse {
     url: String,
     path: String,
@@ -21,9 +21,11 @@ struct JsonResponse {
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new().route("/*path", any(index));
+    let app = Router::new()
+        .route("/", any(index))
+        .route("/*path", any(index));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
     println!("Listening on http://{}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
@@ -33,9 +35,10 @@ async fn main() {
 
 async fn index(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    _path: Result<Path<String>, PathRejection>,
     OriginalUri(original_uri): OriginalUri,
     request: Request<Body>,
-) -> axum::extract::Json<JsonResponse> {
+) -> (StatusCode, axum::extract::Json<JsonResponse>) {
     let queries: HashMap<String, String> = request
         .uri()
         .query()
@@ -59,8 +62,16 @@ async fn index(
         path: request.uri().path().to_owned(),
         method: request.method().to_string(),
         headers,
-        queries,
+        queries: queries.clone(),
         origin: addr.to_string(),
     };
-    Json(response)
+
+    let status_param: u16 = queries
+        .get("status")
+        .unwrap_or(&String::from("200"))
+        .parse()
+        .unwrap_or(200);
+
+    let status_code = StatusCode::from_u16(status_param);
+    (status_code.unwrap_or(StatusCode::OK), Json(response))
 }
